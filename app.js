@@ -10,9 +10,15 @@ const el = (tag, cls, text) => {
   if (text !== undefined) e.textContent = text;
   return e;
 };
+// Colours given as CSS variables go into the style, not into presentation attributes: Safari ignores var() in
+// fill="..." / stroke="..." attributes, which left the charts empty there.
+const STYLE_ATTRS = new Set(["fill", "stroke", "fill-opacity", "stroke-opacity"]);
 const svgEl = (tag, attrs) => {
   const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  for (const k in attrs) {
+    if (STYLE_ATTRS.has(k) && String(attrs[k]).includes("var(")) e.style.setProperty(k, attrs[k]);
+    else e.setAttribute(k, attrs[k]);
+  }
   return e;
 };
 const fmt = (opts) => new Intl.DateTimeFormat("en-GB", { timeZone: TZ, ...opts });
