@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day-ahead power price forecast</title>
+<meta name="description" content="Tomorrow's hourly electricity prices for nine European bidding zones, forecast every morning before the day-ahead auction, with forecast ranges. Hobby project.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 12 L5 7 L9 9 L15 3' fill='none' stroke='%233987e5' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark";</script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header class="top">
+    <div>
+      <h1>Day-ahead power price forecast</h1>
+      <p class="lede">Hourly electricity prices for the next delivery day in nine European bidding zones, forecast each morning
+        before the noon auction, with the range the price is likely to fall in.</p>
+    </div>
+    <div class="top-right">
+      <span class="live" id="exported"></span>
+      <button type="button" class="btn" id="theme">Light mode</button>
+    </div>
+  </header>
+
+  <section id="overview">
+    <h2 id="ov-title">All zones</h2>
+    <p class="note" id="ov-note"></p>
+    <div class="ov" id="ov-chart"></div>
+  </section>
+
+  <div class="filters" role="group" aria-label="Filters">
+    <label>Bidding zone
+      <select id="zone"></select>
+    </label>
+  </div>
+
+  <section id="tomorrow">
+    <div class="sec-head">
+      <h2 id="fc-title">Forecast</h2>
+      <div class="nav" role="group" aria-label="Delivery day">
+        <button type="button" id="day-prev" aria-label="Earlier day">‹ Earlier</button>
+        <span id="day-label"></span>
+        <button type="button" id="day-next" aria-label="Later day">Later ›</button>
+      </div>
+    </div>
+    <p class="note" id="fc-status"></p>
+    <div class="tiles" id="fc-tiles"></div>
+    <h3>Price forecast per hour, €/MWh <span class="muted">(click a legend entry to show or hide it)</span></h3>
+    <div class="chart" id="fc-chart"></div>
+    <div class="chips" id="drv-chips"><span class="lbl">Model inputs for this day:</span></div>
+    <div id="drv-panels"></div>
+    <p class="muted" id="drv-note"></p>
+    <details class="table-view"><summary>Show as table</summary><div id="fc-table"></div></details>
+  </section>
+
+  <section id="record">
+    <div class="sec-head">
+      <h2>Track record</h2>
+      <div class="seg" role="group" aria-label="Track record period" id="rec-range">
+        <button type="button" data-v="14">14 days</button>
+        <button type="button" data-v="30" aria-pressed="true">30 days</button>
+        <button type="button" data-v="90">90 days</button>
+        <button type="button" data-v="0">All</button>
+      </div>
+    </div>
+    <p class="note" id="rec-note"></p>
+    <div class="tiles" id="rec-tiles"></div>
+    <h3>Average miss per hour, per day, €/MWh</h3>
+    <div class="chart" id="rec-daily"></div>
+    <h3>Hours inside the 80% forecast range, 7-day average, %</h3>
+    <div class="chart" id="rec-cover"></div>
+    <details class="table-view"><summary>Show as table</summary><div id="rec-table"></div></details>
+  </section>
+
+  <section id="weather">
+    <h2>Weather forecast, next 48 hours</h2>
+    <p class="note" id="wx-note">Loading from Open-Meteo…</p>
+    <div class="grid3">
+      <div><h3>Wind speed at 100 m, m/s</h3><div class="chart" id="wx-wind"></div></div>
+      <div><h3>Solar radiation, W/m²</h3><div class="chart" id="wx-sun"></div></div>
+      <div><h3>Temperature, °C</h3><div class="chart" id="wx-temp"></div></div>
+    </div>
+  </section>
+
+  <section id="news">
+    <h2>Energy news</h2>
+    <p class="note" id="news-note"></p>
+    <p class="summary" id="news-summary"></p>
+    <div class="tiles" id="news-tiles"></div>
+    <ul class="headlines" id="news-list"></ul>
+    <details class="table-view" id="news-rest-wrap"><summary>Other headlines (not relevant, or no clear effect on prices)</summary><ul class="headlines" id="news-rest"></ul></details>
+    <h3>News scores per day (headlines pointing to higher minus lower prices)</h3>
+    <div class="chart" id="news-chart"></div>
+  </section>
+
+  <section id="level">
+    <div class="sec-head">
+      <h2>Market level and drift</h2>
+      <div class="seg" role="group" aria-label="Market level period" id="lvl-range">
+        <button type="button" data-v="91">3 months</button>
+        <button type="button" data-v="182">6 months</button>
+        <button type="button" data-v="365" aria-pressed="true">1 year</button>
+      </div>
+    </div>
+    <p class="note" id="level-note"></p>
+    <p class="status" id="drift-status"></p>
+    <h3>Market level index, €/MWh</h3>
+    <div class="chart" id="level-chart"></div>
+  </section>
+
+  <footer>
+    <p><strong>How it works.</strong> Every morning the models are retrained on all data up to that day and forecast the
+      next day's hourly prices, using only information available before the day-ahead auction closes at noon. Each
+      forecast is stored with the time it was made and never changed afterwards. Days before the live start
+      ("backfill") were computed afterwards with exactly the same setup. The forecast range for a day comes from how far
+      the forecasts missed in the eight weeks before it (per hour of the day); it uses only misses that were known when
+      the forecast was made. The gas price is not used: there is no free daily source for it. Realised prices are not
+      shown; only how far the forecasts were off.</p>
+    <p><strong>Sources.</strong> Demand forecasts: ENTSO-E Transparency Platform (transparency.entsoe.eu), via
+      entsoemcp.com. Weather: <a href="https://open-meteo.com">Open-Meteo</a> (CC BY 4.0). CO2: SparkChange Physical
+      Carbon EUA ETC. Headlines: <a href="https://www.gdeltproject.org">GDELT</a>, labelled by an open language model
+      (Qwen2.5 7B).</p>
+    <p>A personal hobby project. Not advice of any kind; no guarantee of accuracy or availability.</p>
+  </footer>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
