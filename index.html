@@ -7,7 +7,7 @@
 <meta name="description" content="Tomorrow's hourly electricity prices for nine European bidding zones, forecast every morning before the day-ahead auction, with forecast ranges. Hobby project.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 12 L5 7 L9 9 L15 3' fill='none' stroke='%233987e5' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark";</script>
-<link rel="stylesheet" href="style.css?v=f416ee12d8">
+<link rel="stylesheet" href="style.css?v=21f90325a5">
 </head>
 <body>
 <main>
@@ -15,7 +15,8 @@
     <div>
       <h1>Day-ahead power price forecast</h1>
       <p class="lede">Hourly electricity prices for the next delivery day in nine European bidding zones, forecast each morning
-        before the noon auction, with the range the price is likely to fall in.</p>
+        before the noon auction, with the range the price is likely to fall in. Headline forecast: Mistral's Timestral
+        time-series model, given demand and weather forecasts; compared with LEAR, the standard benchmark.</p>
     </div>
     <div class="top-right">
       <span class="live" id="exported"></span>
@@ -66,7 +67,7 @@
     </div>
     <p class="note" id="rec-note"></p>
     <div class="tiles" id="rec-tiles"></div>
-    <h3>Average miss per hour, per day, €/MWh</h3>
+    <h3>Average miss per hour, 7-day average, €/MWh</h3>
     <div class="chart" id="rec-daily"></div>
     <h3>Hours inside the 80% forecast range, 7-day average, %</h3>
     <div class="chart" id="rec-cover"></div>
@@ -111,20 +112,25 @@
   </section>
 
   <footer>
-    <p><strong>How it works.</strong> Every morning the models are retrained on all data up to that day and forecast the
-      next day's hourly prices, using only information available before the day-ahead auction closes at noon. Each
+    <p><strong>How it works.</strong> Every morning the models forecast the next day's hourly prices, using only
+      information available before the day-ahead auction closes at noon. The headline is Timestral, a pretrained
+      time-series model by Mistral AI used as is (no training on this data): it reads the last twelve weeks of hourly
+      prices, the demand and weather forecasts for the delivery day and recent neighbour prices, and gives a range of
+      outcomes; the shaded ranges are its own. It had the lowest error of the models tested over the year before the
+      live start. LEAR (a linear model per hour) and the BDT (gradient-boosted trees) are retrained every day on all data
+      up to that day. Each
       forecast is stored with the time it was made and never changed afterwards. Days before the live start
-      ("backfill") were computed afterwards with exactly the same setup. The forecast range for a day comes from how far
-      the forecasts missed in the eight weeks before it (per hour of the day); it uses only misses that were known when
-      the forecast was made. The gas price is not used: there is no free daily source for it. Realised prices are not
-      shown; only how far the forecasts were off.</p>
+      ("backfill") were computed afterwards with exactly the same setup and are marked as such. For the few days without
+      a Timestral forecast, the headline is LEAR + BDT and its range comes from how far it missed in the eight weeks
+      before. The gas price is not used: there is no free daily source for it. Realised prices are not shown; only how
+      far the forecasts were off.</p>
     <p><strong>Sources.</strong> Demand forecasts: ENTSO-E Transparency Platform (transparency.entsoe.eu), via
       entsoemcp.com. Weather: <a href="https://open-meteo.com">Open-Meteo</a> (CC BY 4.0). CO2: SparkChange Physical
       Carbon EUA ETC. Headlines: <a href="https://www.gdeltproject.org">GDELT</a>, labelled by an open language model
-      (Qwen2.5 7B).</p>
+      (Qwen2.5 7B). Headline model: Timestral 209M by Mistral AI (Modified MIT License).</p>
     <p>A personal hobby project. Not advice of any kind; no guarantee of accuracy or availability.</p>
   </footer>
 </main>
-<script src="app.js?v=f416ee12d8"></script>
+<script src="app.js?v=21f90325a5"></script>
 </body>
 </html>

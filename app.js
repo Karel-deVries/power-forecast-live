@@ -33,6 +33,7 @@ const num = (v, d = 1) => (ok(v) ? v.toFixed(d) : "–");
 const mean = (a) => { const v = a.filter(ok); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
 const pctTxt = (v) => (ok(v) ? Math.round(v * 100) + "%" : "–");
 const KIND = { live: "live", backfill: "backfill", backtest: "backtest" };
+const HEADLINE = { timestral: "Timestral", combined: "LEAR + BDT" };   // the model behind the headline forecast
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const dayWord = (date) => {
   const t = isoAms(new Date()), tm = isoAms(new Date(Date.now() + 864e5));
@@ -42,7 +43,7 @@ const dayWord = (date) => {
 const state = {
   zones: null, zone: null, doc: null, news: null, dayIdx: null, range: 30, levelRange: 365,
   // per chart: series switched off in the legend (the single models start hidden to keep the first view calm)
-  hidden: { fc: new Set(["LEAR (linear)", "BDT (trees)"]), rec: new Set(["LEAR (linear)", "BDT (trees)"]) },
+  hidden: { fc: new Set(["LEAR + BDT", "BDT (trees)"]), rec: new Set(["LEAR + BDT", "BDT (trees)"]) },
   drivers: new Set(["demand", "wind"]),
 };
 // A tap or click outside a chart closes that chart's readout.
@@ -328,7 +329,8 @@ function renderOverview() {
   const late = zs.filter((z) => z.summary.date === date && z.summary.late).length;
   const behind = zs.filter((z) => z.summary.date !== date).map((z) => z.code);
   $("ov-note").textContent = "Each row is one bidding zone: the line runs from the cheapest to the most expensive hour, the dot is the day's average. " +
-    "The 30-day error is the average miss per hour, with the change compared with simply repeating the day before. Select a row for the details. " +
+    "The 30-day error is the headline forecast's average miss per hour, with the change compared with LEAR, the standard benchmark" +
+    (zs.some((z) => (z.summary.backfill_share || 0) > 0.5) ? " (mostly computed afterwards, before Timestral ran live)" : "") + ". Select a row for the details. " +
     (late ? `${late === zs.length ? "All" : late} of these forecasts ${late === 1 ? "was" : "were"} made after the auction had closed (the daily job started late). ` : "") +
     (behind.length ? `Not yet updated: ${behind.join(", ")} (showing an older day).` : "");
   const lo0 = Math.min(...zs.map((z) => z.summary.min)), hi0 = Math.max(...zs.map((z) => z.summary.max));
@@ -354,9 +356,9 @@ function renderOverview() {
     row.setAttribute("aria-label", `${z.name}: average ${num(s.mean, 0)}, lowest hour ${num(s.min, 0)}, highest hour ${num(s.max, 0)} euro per megawatt hour` +
       (s.date !== date ? `, forecast for ${s.date}` : ""));
     const name = el("span", "zn", z.name);
-    if (ok(s.mae_combined)) {
-      const rel = Math.round((s.mae_combined / s.mae_naive - 1) * 100);
-      name.append(el("small", "", `30-day error ${num(s.mae_combined, 0)} (${rel < 0 ? "−" + -rel : "+" + rel}%)`));
+    if (ok(s.mae_headline)) {
+      const rel = Math.round((s.mae_headline / s.mae_lear - 1) * 100);
+      name.append(el("small", "", `30-day error ${num(s.mae_headline, 0)} (${rel < 0 ? "−" + -rel : "+" + rel}% vs LEAR)`));
     }
     const tr = el("span", "track");
     for (const t of ticks) { const g = el("i", "grid"); g.style.left = pct(t); tr.append(g); }
@@ -391,8 +393,9 @@ function renderForecast(animate = true) {
   $("day-next").disabled = latest;
   $("day-label").textContent = latest ? "newest" : `${days.length - 1 - i} day${days.length - 1 - i === 1 ? "" : "s"} back`;
 
-  const notes = [];
-  if (f.kind === "live") notes.push(`Made ${fDayHour.format(new Date(f.issued_at))} (Amsterdam time), ${f.late ? "after" : "before"} the auction closed.`);
+  const notes = [], model = HEADLINE[f.headline_model] || "LEAR + BDT";
+  if (f.headline_kind === "live") notes.push(`${model} forecast made ${fDayHour.format(new Date(f.headline_issued_at))} (Amsterdam time), ${f.late ? "after" : "before"} the auction closed.`);
+  else if (f.kind === "live") notes.push(`LEAR and the BDT were made live (${fDayHour.format(new Date(f.issued_at))}); ${model} was added afterwards with the same inputs (backfill).`);
   else notes.push("Computed afterwards with the live setup (backfill).");
   if (f.missing_labels && f.missing_labels.length) notes.push(`Made without inputs that were not published in time: ${[...new Set(f.missing_labels)].join(", ")}.`);
   if (latest) {
@@ -402,27 +405,26 @@ function renderForecast(animate = true) {
     if (w === "today") notes.push("This is today's forecast; tomorrow's appears after the morning run.");
     if (f.kind === "live" && !state.doc.latest.inputs.news) notes.push("Made without that morning's news scores.");
   }
-  if (rec && rec.mae) {
+  if (rec && ok(rec.in80)) {
     const n = f.ts_utc.length;
-    notes.push(`Result: the forecast missed by ${num(rec.mae.combined)} €/MWh per hour on average` +
-      (ok(rec.in80) ? `; the price was inside the 80% range in ${Math.round(rec.in80 * n)} of ${n} hours.` : "."));
+    notes.push(`Result: the price was inside the 80% range in ${Math.round(rec.in80 * n)} of ${n} hours.`);
   }
   $("fc-status").textContent = notes.join(" ");
 
-  const c = f.combined, valid = c.filter(ok), iMax = c.indexOf(Math.max(...valid)), iMin = c.indexOf(Math.min(...valid));
+  const c = f.headline, valid = c.filter(ok), iMax = c.indexOf(Math.max(...valid)), iMin = c.indexOf(Math.min(...valid));
   const summ = (state.zones.zones.find((z) => z.code === state.zone) || {}).summary;
   tiles($("fc-tiles"), [
     [num(mean(c), 0), "€/MWh", "average of the day"],
     [num(c[iMax], 0), "€/MWh", `highest hour, ${fHour.format(times[iMax])}`],
     [num(c[iMin], 0), "€/MWh", `lowest hour, ${fHour.format(times[iMin])}`],
-    rec && rec.mae ? [num(rec.mae.combined, 0), "€/MWh", "average miss per hour, this day"]
-      : [summ && ok(summ.mae_combined) ? "±" + num(summ.mae_combined, 0) : "–", "€/MWh", "typical miss per hour (last 30 days)"],
+    [summ && ok(summ.mae_headline) ? "±" + num(summ.mae_headline, 0) : "–", "€/MWh", "typical miss per hour (last 30 days)"],
   ]);
 
   const labels = times.map((t) => fDayHour.format(t)), xTicks = times.map((t, k) => ({ i: k, text: fHour.format(t) })).filter((_, k) => k % 3 === 0);
   const series = [
-    { name: "LEAR + BDT combined", color: "var(--combined)", values: f.combined },
-    { name: "LEAR (linear)", color: "var(--lear)", values: f.lear },
+    { name: f.headline_model === "timestral" ? "Timestral (headline)" : "LEAR + BDT (headline)", color: "var(--combined)", values: f.headline },
+    { name: "LEAR (baseline)", color: "var(--lear)", values: f.lear },
+    ...(f.headline_model === "timestral" ? [{ name: "LEAR + BDT", color: "var(--mix)", values: f.combined }] : []),
     { name: "BDT (trees)", color: "var(--bdt)", values: f.bdt },
   ];
   if (f.band) {
@@ -449,11 +451,11 @@ function renderForecast(animate = true) {
   renderDrivers(f, labels, xTicks);
 
   const table = el("table"), head = el("tr");
-  ["Hour", "Combined", "80% range", "LEAR", "BDT", "Demand GW", "Wind m/s", "Sun W/m²", "Temp °C"].forEach((h) => head.append(el("th", "", h)));
+  ["Hour", model, "80% range", "LEAR", "LEAR + BDT", "BDT", "Demand GW", "Wind m/s", "Sun W/m²", "Temp °C"].forEach((h) => head.append(el("th", "", h)));
   table.append(head);
   times.forEach((t, k) => {
     const tr = el("tr"), dv = f.drivers || {};
-    [fHour.format(t), num(f.combined[k]), f.band ? `${num(f.band.q10[k], 0)}–${num(f.band.q90[k], 0)}` : "–", num(f.lear[k]), num(f.bdt[k]),
+    [fHour.format(t), num(f.headline[k]), f.band ? `${num(f.band.q10[k], 0)}–${num(f.band.q90[k], 0)}` : "–", num(f.lear[k]), num(f.combined[k]), num(f.bdt[k]),
       num((dv.demand || [])[k], 2), num((dv.wind || [])[k]), num((dv.sun || [])[k], 0), num((dv.temp || [])[k])].forEach((v) => tr.append(el("td", "", v)));
     table.append(tr);
   });
@@ -481,51 +483,51 @@ function renderDrivers(f, labels, xTicks) {
 
 /* ---------- track record ---------- */
 function renderRecord(animate = true) {
-  const scored = state.doc.days.filter((d) => d.mae), days = state.range ? scored.slice(-state.range) : scored;
-  const live = scored.filter((d) => d.kind === "live");
-  const avg = (rows, k) => mean(rows.map((d) => d.mae[k]));
-  const late = live.filter((d) => d.late).length, incomplete = live.filter((d) => d.incomplete).length;
-  const c = avg(days, "combined"), n = avg(days, "naive"), cover = mean(days.map((d) => d.in80));
+  // Only multi-day averages are published (a single day's error would reveal that day's average price):
+  // per day the 7-day rolling average, plus totals over the last 14 / 30 / 90 / all days and the live days.
+  const all = state.doc.days.filter((d) => d.mae7 || ok(d.in80)), days = state.range ? all.slice(-state.range) : all;
+  const agg = state.doc.agg || {}, a = agg[state.range ? String(state.range) : "all"] || {}, lv = agg.live || { days: 0 };
   tiles($("rec-tiles"), [
-    [num(c), "€/MWh", `average miss per hour, ${state.range ? "last " + days.length + " days" : "all " + days.length + " days"}`],
-    [ok(c) && n ? Math.round((c / n - 1) * 100) + "%" : "–", "", "compared with simply repeating the day before"],
-    [pctTxt(cover), "", "of hours inside the 80% range (should be about 80%)"],
-    [live.length ? num(avg(live, "combined")) : "–", live.length ? "€/MWh" : "",
-      `live forecasts only (${live.length} day${live.length === 1 ? "" : "s"}` +
-      (late ? `, ${late} made after the auction closed` : "") + (incomplete ? `, ${incomplete} with an input missing` : "") + ")"],
+    [num(a.headline), "€/MWh", `average miss per hour, ${state.range ? "last " + a.days + " days" : "all " + a.days + " days"}`],
+    [ok(a.headline) && a.lear ? Math.round((a.headline / a.lear - 1) * 100) + "%" : "–", "", "compared with LEAR, the standard benchmark"],
+    [pctTxt(a.in80), "", "of hours inside the 80% range (should be about 80%)"],
+    [ok(lv.headline) ? num(lv.headline) : "–", ok(lv.headline) ? "€/MWh" : "",
+      `live forecasts only (${lv.days} day${lv.days === 1 ? "" : "s"}` + (lv.days < 7 ? "; shown from 7 days" : "") +
+      (lv.late ? `, ${lv.late} made after the auction closed` : "") + (lv.incomplete ? `, ${lv.incomplete} with an input missing` : "") + ")"],
   ]);
   const kinds = new Set(days.map((d) => d.kind));
-  $("rec-note").textContent = "How far the forecasts were off, as an average over the hours of each day. " +
+  $("rec-note").textContent = "How far the forecasts were off, per hour, averaged over 7 days (each point covers that day and the 6 before it). " +
     (kinds.has("backfill") ? "Backfill days were computed afterwards with the live setup. " : "") +
     (kinds.has("live") ? "Dots mark live forecasts: filled = made before the auction closed, open = made after it. " : "") +
-    (ok(cover) && cover < 0.75 ? "The ranges have been too narrow lately: prices moved more than in the weeks before." : "");
+    (ok(a.in80) && a.in80 < 0.75 ? "The ranges have been too narrow lately: prices moved more than in the weeks before." : "");
   const firstNew = days.findIndex((d) => d.kind === "live");
-  const labels = days.map((d) => `${fDay.format(dayDate(d.date))} · ${KIND[d.kind]}${d.late ? ", after the auction" : ""}${d.incomplete ? ", input missing" : ""}`);
+  const labels = days.map((d) => `7 days to ${fDay.format(dayDate(d.date))} · ${KIND[d.kind]}${d.late ? ", after the auction" : ""}${d.incomplete ? ", input missing" : ""}`);
   const xTicks = days.map((d, i) => ({ i, text: fDay.format(dayDate(d.date)) })).filter((_, i) => i % Math.ceil(days.length / 8) === 0);
+  const m7 = (k) => days.map((d) => (d.mae7 ? d.mae7[k] ?? null : null));
   lineChart($("rec-daily"), {
-    id: "rec", title: "Average miss per day", labels, xTicks, height: 220, zeroBased: true, animate,
+    id: "rec", title: "Average miss per hour, 7-day average", labels, xTicks, height: 220, zeroBased: true, animate,
     marker: firstNew > 0 ? { i: firstNew, text: "live from here" } : null,
     series: [
-      { name: "LEAR + BDT combined", color: "var(--combined)", values: days.map((d) => d.mae.combined),
+      { name: "Headline forecast (Timestral)", color: "var(--combined)", values: m7("headline"),
         dots: days.map((d) => (d.kind !== "live" ? null : d.late ? "hollow" : "fill")) },
-      { name: "LEAR (linear)", color: "var(--lear)", values: days.map((d) => d.mae.lear) },
-      { name: "BDT (trees)", color: "var(--bdt)", values: days.map((d) => d.mae.bdt) },
-      { name: "Simple rule: repeat the day before", color: "var(--neutral)", values: days.map((d) => d.mae.naive) },
+      { name: "LEAR (baseline)", color: "var(--lear)", values: m7("lear") },
+      { name: "LEAR + BDT", color: "var(--mix)", values: m7("combined") },
+      { name: "BDT (trees)", color: "var(--bdt)", values: m7("bdt") },
     ],
   });
-  const off = scored.length - days.length;   // 7-day average over all scored days, so the first shown days use the days before them
-  const roll = days.map((_, i) => mean(scored.slice(Math.max(0, off + i - 6), off + i + 1).map((d) => d.in80)));
+  const off = all.length - days.length;   // 7-day average over all days, so the first shown days use the days before them
+  const roll = days.map((_, i) => mean(all.slice(Math.max(0, off + i - 6), off + i + 1).map((d) => d.in80)));
   lineChart($("rec-cover"), {
     id: "cover", title: "Hours inside the 80% range", labels, xTicks, height: 170, domain: [0, 100], decimals: 0, animate,
     ref: { value: 80, text: "aim: 80%" }, series: [{ name: "Inside the 80% range", color: "var(--combined)", values: roll.map((v) => (ok(v) ? v * 100 : null)) }],
   });
   const table = el("table"), head = el("tr");
-  ["Delivery day", "Type", "Combined", "LEAR", "BDT", "Simple rule", "In 80% range", "Notes"].forEach((h) => head.append(el("th", "", h)));
+  ["Delivery day", "Type", "Headline, 7 days", "LEAR, 7 days", "LEAR + BDT, 7 days", "BDT, 7 days", "In 80% range", "Notes"].forEach((h) => head.append(el("th", "", h)));
   table.append(head);
   for (const d of [...days].reverse()) {
-    const tr = el("tr");
-    [fDay.format(dayDate(d.date)), KIND[d.kind], num(d.mae.combined), num(d.mae.lear), num(d.mae.bdt), num(d.mae.naive), pctTxt(d.in80),
-      [d.late && "after the auction", d.incomplete && "input missing"].filter(Boolean).join(", ")].forEach((v) => tr.append(el("td", "", v)));
+    const tr = el("tr"), q = d.mae7 || {};
+    [fDay.format(dayDate(d.date)), KIND[d.kind], num(q.headline), num(q.lear), num(q.combined), num(q.bdt), pctTxt(d.in80),
+      [d.model !== "timestral" && "headline: LEAR + BDT", d.late && "after the auction", d.incomplete && "input missing"].filter(Boolean).join(", ")].forEach((v) => tr.append(el("td", "", v)));
     table.append(tr);
   }
   $("rec-table").textContent = "";
