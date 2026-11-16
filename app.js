@@ -63,7 +63,8 @@ function niceTicks(lo, hi, n = 5) {
 function lineChart(host, cfg) {
   // cfg: {id, labels, xTicks: [{i, text}], series: [{name, color, values, dots} | {name, color, band: true, lo, hi, opacity}],
   //       height, decimals, zeroBased, domain: [lo, hi], ref: {value, text}, shade: {from, to, text}, marker: {i, text},
-  //       sync: group name (crosshair follows across charts of the group), title, empty}
+  //       sync: group name (crosshair follows across charts of the group), title, empty,
+  //       selected: {i, text} (a marked point), onPick: (i) => {} (click / tap / Enter on a point)}
   host.textContent = "";
   host.dataset.sync = cfg.sync || "";
   const id = cfg.id || host.id;
@@ -141,6 +142,13 @@ function lineChart(host, cfg) {
       const right = mx > W - m.r - 110;   // near the right edge: label to the left of the line
       const lab = svgEl("text", { x: right ? mx - 5 : mx + 5, y: m.t + 10, class: "mark-label", "text-anchor": right ? "end" : "start" });
       lab.textContent = cfg.marker.text;
+      svg.append(lab);
+    }
+    if (cfg.selected && cfg.selected.i >= 0) {
+      const sx = x(cfg.selected.i), right = sx > W - m.r - 80;
+      svg.append(svgEl("line", { x1: sx, x2: sx, y1: m.t, y2: H - m.b, stroke: "var(--ink-2)", "stroke-width": 1 }));
+      const lab = svgEl("text", { x: right ? sx - 5 : sx + 5, y: m.t + 10, class: "mark-label", "text-anchor": right ? "end" : "start" });
+      lab.textContent = cfg.selected.text;
       svg.append(lab);
     }
     const fades = [], lines = [];
@@ -254,7 +262,12 @@ function lineChart(host, cfg) {
     svg.addEventListener("focus", () => { if (svg.matches(":focus-visible")) show(cur < 0 ? pts - 1 : cur); });
     svg.addEventListener("keydown", (e) => {
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") { show(cur + (e.key === "ArrowRight" ? 1 : -1)); e.preventDefault(); }
+      if (e.key === "Enter" && cfg.onPick && cur >= 0) cfg.onPick(cur);
     });
+    if (cfg.onPick) {
+      svg.style.cursor = "pointer";
+      svg.addEventListener("click", (e) => { at(e); if (cur >= 0) cfg.onPick(cur); });
+    }
   };
   draw(cfg.animate !== false);
   host._sync = { show: (i) => show(i, false), hide: () => hide() };
@@ -538,9 +551,13 @@ const TOPIC = { gas_supply: "gas supply", power_supply: "power supply", geopolit
 const EFFECT = { up: "↑ prices up", down: "↓ prices down", none: "no clear effect" };
 
 function renderNews() {
-  const n = state.news, latest = n.latest, s = n.scores;
+  const n = state.news, s = n.scores;
+  if (!state.newsDay) state.newsDay = n.latest ? n.latest.date : s.length ? s[s.length - 1].date : null;
+  const sel = s.findIndex((d) => d.date === state.newsDay);
   lineChart($("news-chart"), {
     id: "news", title: "News scores per day", labels: s.map((d) => fDay.format(dayDate(d.date))), height: 200, decimals: 0,
+    selected: sel >= 0 ? { i: sel, text: "shown below" } : null, animate: !state.newsRendered,
+    onPick: (i) => { state.newsDay = s[i].date; renderNews(); },
     xTicks: s.map((d, i) => ({ i, text: fDay.format(dayDate(d.date)) })).filter((_, i) => i % 7 === 0),
     series: [
       { name: "Gas supply", color: "var(--combined)", values: s.map((d) => d.gas_tension) },
@@ -548,25 +565,28 @@ function renderNews() {
       { name: "Geopolitics (pointing up only)", color: "var(--bdt)", values: s.map((d) => d.shock) },
     ],
   });
+  state.newsRendered = true;
   $("news-list").textContent = ""; $("news-rest").textContent = "";
-  if (!latest) {
-    $("news-note").textContent = "Headlines from the day before delivery, labelled by a small language model; only the counts feed the price models.";
-    $("news-summary").textContent = s.length ? s[s.length - 1].summary : "";
-    $("news-tiles").textContent = ""; $("news-rest-wrap").hidden = true;
-    return;
-  }
-  $("news-note").textContent = `Headlines used for delivery day ${fDayLong.format(dayDate(latest.date))}, from ${latest.files_used} of ` +
-    `${latest.files_total} GDELT snapshots of the past 24 hours. A small language model labels each headline; only the counts feed the price models. ` +
-    "The one-line summary is written by the model and can be wrong.";
-  $("news-summary").textContent = latest.summary;
+  const score = s.find((d) => d.date === state.newsDay), day = (n.days || {})[state.newsDay] || null;
+  if (!score) return;
+  $("news-day-title").textContent = `Delivery day ${fDayLong.format(dayDate(score.date))}`;
   const sign = (v) => (v > 0 ? "+" + v : String(v));
   tiles($("news-tiles"), [
-    [sign(latest.gas_tension), "", "gas supply: up minus down"],
-    [sign(latest.power_tension), "", "power supply: up minus down"],
-    [String(latest.shock), "", "geopolitics pointing up"],
-    [String(latest.n_headlines), "", "headlines read"],
+    [sign(score.gas_tension), "", "gas supply: up minus down"],
+    [sign(score.power_tension), "", "power supply: up minus down"],
+    [String(score.shock), "", "geopolitics pointing up"],
+    [score.n_headlines !== undefined ? String(score.n_headlines) : "–", "", "headlines read"],
   ]);
-  for (const it of latest.items) {
+  $("news-summary").textContent = score.summary;
+  if (!day) {
+    $("news-note").textContent = "For this day only the scores were stored; the individual headlines and their labels are kept for days from the live start (1 November 2026) on.";
+    $("news-rest-wrap").hidden = true;
+    return;
+  }
+  $("news-note").textContent = `Headlines published in the 24 hours before the auction for this day, from ${day.files_used} of ` +
+    `${day.files_total} GDELT snapshots. A small language model labels each headline; only the counts feed the price models. ` +
+    "The one-line summary is written by the model and can be wrong.";
+  for (const it of day.items) {
     const li = el("li"), ttl = el("span", "title", it.title);
     ttl.title = it.title;
     li.append(ttl);
