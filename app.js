@@ -409,7 +409,9 @@ function renderForecast(animate = true) {
     series.push({ name: "50% range", color: "var(--combined)", band: true, lo: f.band.q25, hi: f.band.q75, opacity: 0.24 });
     series.push({ name: "80% range", color: "var(--combined)", band: true, lo: f.band.q10, hi: f.band.q90, opacity: 0.12 });
   }
-  lineChart($("fc-chart"), { id: "fc", title: "Hourly price forecast", labels, xTicks, height: 300, series, sync: "fc", animate });
+  const nowI = times.findIndex((t) => t.getTime() > Date.now()) - 1;
+  state.nowMark = nowI >= 0 ? { i: nowI, text: "now" } : null;   // only when the shown day is today
+  lineChart($("fc-chart"), { id: "fc", title: "Hourly price forecast", labels, xTicks, height: 300, series, sync: "fc", animate, selected: state.nowMark });
 
   // Model inputs: chips switch panels on and off; the panels share the price chart's crosshair.
   const chips = $("drv-chips");
@@ -449,7 +451,7 @@ function renderDrivers(f, labels, xTicks) {
     chart.id = "drv-" + d.key;
     box.append(el("h3", "", `${d.name}, ${d.unit}`), chart);
     host.append(box);
-    lineChart(chart, { title: d.name, labels, xTicks, height: 130, decimals: d.dec, zeroBased: d.zero, sync: "fc",
+    lineChart(chart, { title: d.name, labels, xTicks, height: 130, decimals: d.dec, zeroBased: d.zero, sync: "fc", selected: state.nowMark,
       series: [{ name: d.name, color: "var(--ink-2)", values: (f.drivers || {})[d.key] || [] }] });
   }
   $("drv-note").textContent = state.drivers.size
@@ -519,27 +521,27 @@ async function renderWeather() {
   try {
     const url = "https://api.open-meteo.com/v1/forecast?latitude=" + z.weather.map((w) => w.lat).join(",") +
       "&longitude=" + z.weather.map((w) => w.lon).join(",") +
-      "&hourly=temperature_2m,wind_speed_100m,shortwave_radiation&wind_speed_unit=ms&forecast_days=3&timezone=UTC";
+      "&hourly=temperature_2m,wind_speed_100m,shortwave_radiation&wind_speed_unit=ms&past_days=1&forecast_days=3&timezone=UTC";
     const res = await fetch(url);
     if (!res.ok) throw new Error(res.status);
     let data = await res.json();
     if (code !== state.zone) return;   // the visitor switched zone meanwhile
     if (!Array.isArray(data)) data = [data];
     const times = data[0].hourly.time.map((t) => new Date(t + "Z")), now = Date.now();
-    const keep = times.map((t, i) => (t >= now - 3600e3 && t <= now + 48 * 3600e3 ? i : -1)).filter((i) => i >= 0);
+    const keep = times.map((t, i) => (t >= now - 12 * 3600e3 && t <= now + 48 * 3600e3 ? i : -1)).filter((i) => i >= 0);   // 12 h back: "now" sits inside
     const avg = (k) => keep.map((i) => mean(data.map((p) => p.hourly[k][i])));
     const labels = keep.map((i) => fDayHour.format(times[i]));
     const xTicks = keep.map((i, j) => ({ i: j, text: fmt({ weekday: "short", day: "numeric", month: "short" }).format(times[i]) }))
       .filter((t, j) => fHour.format(times[keep[j]]) === "12:00");
     const fdate = state.doc.latest.date, inDay = keep.map((i) => isoAms(times[i]) === fdate);
-    const shade = inDay.includes(true) ? { from: inDay.indexOf(true), to: inDay.lastIndexOf(true), text: "forecast day" } : null;
+    const shade = inDay.filter(Boolean).length >= 6 ? { from: inDay.indexOf(true), to: inDay.lastIndexOf(true), text: "forecast day" } : null;   // not for a sliver
     const nowI = keep.findIndex((i) => times[i].getTime() > now) - 1;   // the hour we are in: left of it is past
     const one = (id, k, name) => lineChart($(id), { title: name, labels, xTicks, height: 190, zeroBased: k !== "temperature_2m",
       shade, selected: nowI >= 0 ? { i: nowI, text: "now" } : null, series: [{ name, color: "var(--combined)", values: avg(k) }] });
     one("wx-wind", "wind_speed_100m", "Wind speed");
     one("wx-sun", "shortwave_radiation", "Solar radiation");
     one("wx-temp", "temperature_2m", "Temperature");
-    $("wx-note").textContent = `Forecast values: the newest weather forecast for the coming 48 hours, fetched just now from Open-Meteo, averaged over the zone's weather points: ${names}. ` +
+    $("wx-note").textContent = `Left of the "now" line: the past 12 hours; right of it: the newest forecast for the coming 48 hours, fetched just now from Open-Meteo, averaged over the zone's weather points: ${names}. ` +
       "The price models use the forecast as it stood two days before delivery (see the model inputs above).";
   } catch (e) {
     $("wx-note").textContent = "The weather forecast could not be loaded from Open-Meteo right now.";
