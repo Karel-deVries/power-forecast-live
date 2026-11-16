@@ -7,7 +7,7 @@
 <meta name="description" content="Tomorrow's hourly electricity prices for nine European bidding zones, forecast every morning before the day-ahead auction, with forecast ranges. Hobby project.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 12 L5 7 L9 9 L15 3' fill='none' stroke='%233987e5' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark";</script>
-<link rel="stylesheet" href="style.css?v=2400f2777f">
+<link rel="stylesheet" href="style.css?v=0298595513">
 </head>
 <body>
 <main>
@@ -48,7 +48,7 @@
     <div class="tiles" id="fc-tiles"></div>
     <h3>Price forecast per hour, €/MWh <span class="muted">(click a legend entry to show or hide it)</span></h3>
     <div class="chart" id="fc-chart"></div>
-    <div class="chips" id="drv-chips"><span class="lbl">Model inputs for this day:</span></div>
+    <div class="chips" id="drv-chips"><span class="lbl">Model inputs for this day (forecasts):</span></div>
     <div id="drv-panels"></div>
     <p class="muted" id="drv-note"></p>
     <details class="table-view"><summary>Show as table</summary><div id="fc-table"></div></details>
@@ -74,7 +74,7 @@
   </section>
 
   <section id="weather">
-    <h2>Weather forecast, next 48 hours</h2>
+    <h2>Weather forecast for the next 48 hours</h2>
     <p class="note" id="wx-note">Loading from Open-Meteo…</p>
     <div class="grid3">
       <div><h3>Wind speed at 100 m, m/s</h3><div class="chart" id="wx-wind"></div></div>
@@ -125,6 +125,6 @@
     <p>A personal hobby project. Not advice of any kind; no guarantee of accuracy or availability.</p>
   </footer>
 </main>
-<script src="app.js?v=2400f2777f"></script>
+<script src="app.js?v=0298595513"></script>
 </body>
 </html>

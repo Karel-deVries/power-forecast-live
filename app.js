@@ -529,16 +529,17 @@ async function renderWeather() {
     const keep = times.map((t, i) => (t >= now - 3600e3 && t <= now + 48 * 3600e3 ? i : -1)).filter((i) => i >= 0);
     const avg = (k) => keep.map((i) => mean(data.map((p) => p.hourly[k][i])));
     const labels = keep.map((i) => fDayHour.format(times[i]));
-    const xTicks = keep.map((i, j) => ({ i: j, text: fDayHour.format(times[i]).replace(/,? \d\d:\d\d$/, "") }))
+    const xTicks = keep.map((i, j) => ({ i: j, text: fmt({ weekday: "short", day: "numeric", month: "short" }).format(times[i]) }))
       .filter((t, j) => fHour.format(times[keep[j]]) === "12:00");
     const fdate = state.doc.latest.date, inDay = keep.map((i) => isoAms(times[i]) === fdate);
     const shade = inDay.includes(true) ? { from: inDay.indexOf(true), to: inDay.lastIndexOf(true), text: "forecast day" } : null;
+    const nowI = keep.findIndex((i) => times[i].getTime() > now) - 1;   // the hour we are in: left of it is past
     const one = (id, k, name) => lineChart($(id), { title: name, labels, xTicks, height: 190, zeroBased: k !== "temperature_2m",
-      shade, series: [{ name, color: "var(--combined)", values: avg(k) }] });
+      shade, selected: nowI >= 0 ? { i: nowI, text: "now" } : null, series: [{ name, color: "var(--combined)", values: avg(k) }] });
     one("wx-wind", "wind_speed_100m", "Wind speed");
     one("wx-sun", "shortwave_radiation", "Solar radiation");
     one("wx-temp", "temperature_2m", "Temperature");
-    $("wx-note").textContent = `Newest forecast, fetched just now from Open-Meteo, averaged over the zone's weather points: ${names}. ` +
+    $("wx-note").textContent = `Forecast values: the newest weather forecast for the coming 48 hours, fetched just now from Open-Meteo, averaged over the zone's weather points: ${names}. ` +
       "The price models use the forecast as it stood two days before delivery (see the model inputs above).";
   } catch (e) {
     $("wx-note").textContent = "The weather forecast could not be loaded from Open-Meteo right now.";
