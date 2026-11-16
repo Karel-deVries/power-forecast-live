@@ -64,8 +64,10 @@ function lineChart(host, cfg) {
   // cfg: {id, labels, xTicks: [{i, text}], series: [{name, color, values, dots} | {name, color, band: true, lo, hi, opacity}],
   //       height, decimals, zeroBased, domain: [lo, hi], ref: {value, text}, shade: {from, to, text}, marker: {i, text},
   //       sync: group name (crosshair follows across charts of the group), title, empty,
-  //       selected: {i, text} (a marked point), onPick: (i) => {} (click / tap / Enter on a point)}
+  //       selected: {i, text} (a marked point), onPick: (i) => {} (click / tap / Enter on a point),
+  //       times: Date per point -> a "now" line that moves with the clock while now lies inside the chart}
   host.textContent = "";
+  clearInterval(host._nowTimer);
   host.dataset.sync = cfg.sync || "";
   const id = cfg.id || host.id;
   const hidden = state.hidden[id] || (state.hidden[id] = new Set());
@@ -191,6 +193,24 @@ function lineChart(host, cfg) {
         svg.append(svgEl("circle", { cx: x(i), cy: y(v), r: 4, fill: kind === "fill" ? s.color : "var(--surface)",
           stroke: kind === "fill" ? "var(--surface)" : s.color, "stroke-width": 2 }));
       });
+    }
+    if (cfg.times && cfg.times.length === pts) {   // live "now" line, placed between hourly points by the minute
+      const nl = svgEl("line", { y1: m.t, y2: H - m.b, stroke: "var(--warning)", "stroke-width": 1.5 });
+      const nt = svgEl("text", { y: m.t + 10, class: "mark-label" });
+      nt.textContent = "now";
+      svg.append(nl, nt);
+      const place = () => {
+        const t = Date.now(), ts = cfg.times.map((d) => d.getTime());
+        const k = ts.findIndex((v, j) => j < pts - 1 && v <= t && t < ts[j + 1]);
+        const span = ts[pts - 1] - ts[pts - 2] || 3600e3;
+        const pos = k >= 0 ? k + (t - ts[k]) / (ts[k + 1] - ts[k]) : t >= ts[pts - 1] && t < ts[pts - 1] + span ? pts - 1 : -1;
+        const vis = pos >= 0 ? "visible" : "hidden", nx = pos >= 0 ? x(pos) : 0, right = nx > W - m.r - 40;
+        nl.setAttribute("x1", nx); nl.setAttribute("x2", nx); nl.setAttribute("visibility", vis);
+        nt.setAttribute("x", right ? nx - 5 : nx + 5); nt.setAttribute("text-anchor", right ? "end" : "start"); nt.setAttribute("visibility", vis);
+      };
+      place();
+      clearInterval(host._nowTimer);
+      host._nowTimer = setInterval(place, 30000);
     }
     const hair = svgEl("line", { y1: m.t, y2: H - m.b, stroke: "var(--ink-2)", "stroke-width": 1, visibility: "hidden" });
     svg.append(hair);
@@ -409,9 +429,8 @@ function renderForecast(animate = true) {
     series.push({ name: "50% range", color: "var(--combined)", band: true, lo: f.band.q25, hi: f.band.q75, opacity: 0.24 });
     series.push({ name: "80% range", color: "var(--combined)", band: true, lo: f.band.q10, hi: f.band.q90, opacity: 0.12 });
   }
-  const nowI = times.findIndex((t) => t.getTime() > Date.now()) - 1;
-  state.nowMark = nowI >= 0 ? { i: nowI, text: "now" } : null;   // only when the shown day is today
-  lineChart($("fc-chart"), { id: "fc", title: "Hourly price forecast", labels, xTicks, height: 300, series, sync: "fc", animate, selected: state.nowMark });
+  state.fcTimes = times;   // the moving "now" line shows while the shown day is today
+  lineChart($("fc-chart"), { id: "fc", title: "Hourly price forecast", labels, xTicks, height: 300, series, sync: "fc", animate, times });
 
   // Model inputs: chips switch panels on and off; the panels share the price chart's crosshair.
   const chips = $("drv-chips");
@@ -451,7 +470,7 @@ function renderDrivers(f, labels, xTicks) {
     chart.id = "drv-" + d.key;
     box.append(el("h3", "", `${d.name}, ${d.unit}`), chart);
     host.append(box);
-    lineChart(chart, { title: d.name, labels, xTicks, height: 130, decimals: d.dec, zeroBased: d.zero, sync: "fc", selected: state.nowMark,
+    lineChart(chart, { title: d.name, labels, xTicks, height: 130, decimals: d.dec, zeroBased: d.zero, sync: "fc", times: state.fcTimes,
       series: [{ name: d.name, color: "var(--ink-2)", values: (f.drivers || {})[d.key] || [] }] });
   }
   $("drv-note").textContent = state.drivers.size
@@ -535,9 +554,8 @@ async function renderWeather() {
       .filter((t, j) => fHour.format(times[keep[j]]) === "12:00");
     const fdate = state.doc.latest.date, inDay = keep.map((i) => isoAms(times[i]) === fdate);
     const shade = inDay.filter(Boolean).length >= 6 ? { from: inDay.indexOf(true), to: inDay.lastIndexOf(true), text: "forecast day" } : null;   // not for a sliver
-    const nowI = keep.findIndex((i) => times[i].getTime() > now) - 1;   // the hour we are in: left of it is past
     const one = (id, k, name) => lineChart($(id), { title: name, labels, xTicks, height: 190, zeroBased: k !== "temperature_2m",
-      shade, selected: nowI >= 0 ? { i: nowI, text: "now" } : null, series: [{ name, color: "var(--combined)", values: avg(k) }] });
+      shade, times: keep.map((i) => times[i]), series: [{ name, color: "var(--combined)", values: avg(k) }] });
     one("wx-wind", "wind_speed_100m", "Wind speed");
     one("wx-sun", "shortwave_radiation", "Solar radiation");
     one("wx-temp", "temperature_2m", "Temperature");
