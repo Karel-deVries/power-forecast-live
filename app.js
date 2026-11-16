@@ -488,10 +488,10 @@ function renderRecord(animate = true) {
   const all = state.doc.days.filter((d) => d.mae7 || ok(d.in80)), days = state.range ? all.slice(-state.range) : all;
   const agg = state.doc.agg || {}, a = agg[state.range ? String(state.range) : "all"] || {}, lv = agg.live || { days: 0 };
   tiles($("rec-tiles"), [
-    [num(a.headline), "€/MWh", `average miss per hour, ${state.range ? "last " + a.days + " days" : "all " + a.days + " days"}`],
-    [ok(a.headline) && a.lear ? Math.round((a.headline / a.lear - 1) * 100) + "%" : "–", "", "compared with LEAR, the standard benchmark"],
+    [num(a.timestral), "€/MWh", `Timestral's average miss per hour, ${state.range ? "last " + a.days + " days" : "all " + a.days + " days"} with a Timestral forecast`],
+    [ok(a.timestral) && a.lear ? Math.round((a.timestral / a.lear - 1) * 100) + "%" : "–", "", "compared with LEAR on the same days"],
     [pctTxt(a.in80), "", "of hours inside the 80% range (should be about 80%)"],
-    [ok(lv.headline) ? num(lv.headline) : "–", ok(lv.headline) ? "€/MWh" : "",
+    [ok(lv.timestral) ? num(lv.timestral) : "–", ok(lv.timestral) ? "€/MWh" : "",
       `live forecasts only (${lv.days} day${lv.days === 1 ? "" : "s"}` + (lv.days < 7 ? "; shown from 7 days" : "") +
       (lv.late ? `, ${lv.late} made after the auction closed` : "") + (lv.incomplete ? `, ${lv.incomplete} with an input missing` : "") + ")"],
   ]);
@@ -508,7 +508,7 @@ function renderRecord(animate = true) {
     id: "rec", title: "Average miss per hour, 7-day average", labels, xTicks, height: 220, zeroBased: true, animate,
     marker: firstNew > 0 ? { i: firstNew, text: "live from here" } : null,
     series: [
-      { name: "Headline forecast (Timestral)", color: "var(--combined)", values: m7("headline"),
+      { name: "Timestral (headline)", color: "var(--combined)", values: m7("timestral"),
         dots: days.map((d) => (d.kind !== "live" ? null : d.late ? "hollow" : "fill")) },
       { name: "LEAR (baseline)", color: "var(--lear)", values: m7("lear") },
       { name: "LEAR + BDT", color: "var(--mix)", values: m7("combined") },
@@ -522,11 +522,11 @@ function renderRecord(animate = true) {
     ref: { value: 80, text: "aim: 80%" }, series: [{ name: "Inside the 80% range", color: "var(--combined)", values: roll.map((v) => (ok(v) ? v * 100 : null)) }],
   });
   const table = el("table"), head = el("tr");
-  ["Delivery day", "Type", "Headline, 7 days", "LEAR, 7 days", "LEAR + BDT, 7 days", "BDT, 7 days", "In 80% range", "Notes"].forEach((h) => head.append(el("th", "", h)));
+  ["Delivery day", "Type", "Timestral, 7 days", "LEAR, 7 days", "LEAR + BDT, 7 days", "BDT, 7 days", "In 80% range", "Notes"].forEach((h) => head.append(el("th", "", h)));
   table.append(head);
   for (const d of [...days].reverse()) {
     const tr = el("tr"), q = d.mae7 || {};
-    [fDay.format(dayDate(d.date)), KIND[d.kind], num(q.headline), num(q.lear), num(q.combined), num(q.bdt), pctTxt(d.in80),
+    [fDay.format(dayDate(d.date)), KIND[d.kind], num(q.timestral), num(q.lear), num(q.combined), num(q.bdt), pctTxt(d.in80),
       [d.model !== "timestral" && "headline: LEAR + BDT", d.late && "after the auction", d.incomplete && "input missing"].filter(Boolean).join(", ")].forEach((v) => tr.append(el("td", "", v)));
     table.append(tr);
   }
