@@ -1,6 +1,6 @@
 "use strict";
 // Public page: reads data/*.json written by src/export_site.py; live weather comes straight from Open-Meteo.
-// No realised prices are published: only forecasts, forecast ranges and error figures.
+// Realised prices (ENTSO-E Transparency Platform) are shown when the export includes them (zones.json "actuals").
 
 const TZ = "Europe/Amsterdam";
 const $ = (id) => document.getElementById(id);
@@ -426,6 +426,7 @@ function renderForecast(animate = true) {
     { name: "LEAR (baseline)", color: "var(--lear)", values: f.lear },
     ...(f.headline_model === "timestral" ? [{ name: "LEAR + BDT", color: "var(--mix)", values: f.combined }] : []),
     { name: "BDT (trees)", color: "var(--bdt)", values: f.bdt },
+    ...(f.actual && f.actual.some(ok) ? [{ name: "Realised price", color: "var(--ink)", values: f.actual }] : []),
   ];
   if (f.band) {
     series.push({ name: "50% range", color: "var(--combined)", band: true, lo: f.band.q25, hi: f.band.q75, opacity: 0.24 });

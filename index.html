@@ -7,7 +7,7 @@
 <meta name="description" content="Tomorrow's hourly electricity prices for nine European bidding zones, forecast every morning before the day-ahead auction, with forecast ranges. Hobby project.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 12 L5 7 L9 9 L15 3' fill='none' stroke='%233987e5' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark";</script>
-<link rel="stylesheet" href="style.css?v=060c5788a6">
+<link rel="stylesheet" href="style.css?v=d21950876e">
 </head>
 <body>
 <main>
@@ -122,15 +122,15 @@
       forecast is stored with the time it was made and never changed afterwards. Days before the live start
       ("backfill") were computed afterwards with exactly the same setup and are marked as such. For the few days without
       a Timestral forecast, the headline is LEAR + BDT and its range comes from how far it missed in the eight weeks
-      before. The gas price is not used: there is no free daily source for it. Realised prices are not shown; only how
-      far the forecasts were off.</p>
-    <p><strong>Sources.</strong> Demand forecasts: ENTSO-E Transparency Platform (transparency.entsoe.eu), via
-      entsoemcp.com. Weather: <a href="https://open-meteo.com">Open-Meteo</a> (CC BY 4.0). CO2: SparkChange Physical
+      before. The gas price is not used: there is no free daily source for it.</p>
+    <p><strong>Sources.</strong> Realised day-ahead prices and demand forecasts: Source: ENTSO-E Transparency Platform
+      (transparency.entsoe.eu), via entsoemcp.com; day-ahead prices are the auction results of the power exchanges. This
+      page is not affiliated with or endorsed by ENTSO-E. Weather: <a href="https://open-meteo.com">Open-Meteo</a> (CC BY 4.0). CO2: SparkChange Physical
       Carbon EUA ETC. Headlines: <a href="https://www.gdeltproject.org">GDELT</a>, labelled by an open language model
       (Qwen2.5 7B). Headline model: Timestral 209M by Mistral AI (Modified MIT License).</p>
     <p>A personal hobby project. Not advice of any kind; no guarantee of accuracy or availability.</p>
   </footer>
 </main>
-<script src="app.js?v=060c5788a6"></script>
+<script src="app.js?v=d21950876e"></script>
 </body>
 </html>
