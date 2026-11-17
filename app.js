@@ -43,7 +43,7 @@ const dayWord = (date) => {
 const state = {
   zones: null, zone: null, doc: null, news: null, dayIdx: null, range: 30, levelRange: 365,
   // per chart: series switched off in the legend (the single models start hidden to keep the first view calm)
-  hidden: { fc: new Set(["LEAR + BDT", "BDT (trees)"]), rec: new Set(["LEAR + BDT", "BDT (trees)"]) },
+  hidden: { fc: new Set(["LEAR + BDT", "BDT (trees)"]), rec: new Set(["LEAR + BDT", "BDT (trees)"]), rech: new Set(["LEAR (baseline)"]) },
   drivers: new Set(["demand", "wind"]),
 };
 // A tap or click outside a chart closes that chart's readout.
@@ -516,6 +516,25 @@ function renderRecord(animate = true) {
       { name: "BDT (trees)", color: "var(--bdt)", values: m7("bdt") },
     ],
   });
+  // Hour by hour: realised price against the forecasts, over the chosen period (the page holds the last 30 days).
+  const hd = state.doc.hourly.filter((h) => h.actual && h.actual.some(ok)).slice(-(state.range && state.range < 30 ? state.range : 30));
+  $("rec-hourly-wrap").hidden = !hd.length;
+  if (hd.length) {
+    $("rec-hourly-title").textContent = `Forecast and realised price per hour, last ${hd.length} days, €/MWh`;
+    const ts = hd.flatMap((h) => h.ts_utc.map((t) => new Date(t)));
+    const cat = (k) => hd.flatMap((h) => h[k] || h.ts_utc.map(() => null));
+    lineChart($("rec-hourly"), {
+      id: "rech", title: "Forecast and realised price per hour", labels: ts.map((t) => fDayHour.format(t)), height: 260, animate,
+      xTicks: ts.map((t, i) => ({ i, text: fDay.format(t) })).filter((t, i) => fHour.format(ts[i]) === "12:00" && (hd.length <= 14 || i % 72 < 24)),
+      series: [
+        { name: "Realised price", color: "var(--ink)", values: cat("actual") },
+        { name: "Timestral (headline)", color: "var(--combined)", values: cat("timestral") },
+        { name: "LEAR (baseline)", color: "var(--lear)", values: cat("lear") },
+        { name: "80% range", color: "var(--combined)", band: true, lo: hd.flatMap((h) => (h.band ? h.band.q10 : h.ts_utc.map(() => null))),
+          hi: hd.flatMap((h) => (h.band ? h.band.q90 : h.ts_utc.map(() => null))), opacity: 0.12 },
+      ],
+    });
+  }
   const off = all.length - days.length;   // 7-day average over all days, so the first shown days use the days before them
   const roll = days.map((_, i) => mean(all.slice(Math.max(0, off + i - 6), off + i + 1).map((d) => d.in80)));
   lineChart($("rec-cover"), {
@@ -581,7 +600,7 @@ function renderNews() {
   lineChart($("news-chart"), {
     id: "news", title: "News scores per day", labels: s.map((d) => fDay.format(dayDate(d.date))), height: 200, decimals: 0,
     selected: sel >= 0 ? { i: sel, text: "shown below" } : null, animate: !state.newsRendered,
-    onPick: (i) => { state.newsDay = s[i].date; renderNews(); },
+    onPick: (i) => { state.newsDay = s[i].date; renderNews(); renderNewsImpact(); },
     xTicks: s.map((d, i) => ({ i, text: fDay.format(dayDate(d.date)) })).filter((_, i) => i % 7 === 0),
     series: [
       { name: "Gas supply", color: "var(--combined)", values: s.map((d) => d.gas_tension) },
@@ -621,6 +640,45 @@ function renderNews() {
   $("news-rest-wrap").hidden = !$("news-rest").children.length;
 }
 
+/* ---------- news impact on the BDT (the model that uses the news scores) ---------- */
+function renderNewsImpact() {
+  if (!state.doc || !state.news) return;
+  const dates = state.news.scores.map((d) => d.date), byDate = Object.fromEntries(state.doc.days.map((d) => [d.date, d]));
+  const rows = dates.map((d) => byDate[d] || {});
+  const zone = state.doc.name;
+  $("nimp-title").textContent = `What the news did to the forecasts for ${zone}`;
+  const scored = rows.filter((d) => ok(d.news_gain)).slice(-30);
+  const helped = scored.filter((d) => d.news_gain > 0.05).length, hurt = scored.filter((d) => d.news_gain < -0.05).length;
+  tiles($("nimp-tiles"), [
+    [scored.length ? num(mean(scored.map((d) => Math.abs(d.news_push))), 1) : "–", "€/MWh", "average push of the news on the BDT forecast (last 30 days)"],
+    [scored.length ? (mean(scored.map((d) => d.news_gain)) >= 0 ? "+" : "") + num(mean(scored.map((d) => d.news_gain)), 2) : "–", "€/MWh",
+      "error reduction per hour thanks to the news (negative = the news made it worse)"],
+    [scored.length ? `${helped} / ${hurt}` : "–", "", "days the news helped / hurt (rest: no real difference)"],
+  ]);
+  const sel = dates.indexOf(state.newsDay), day = byDate[state.newsDay];
+  let txt = "The BDT is the model that uses the news scores (Timestral does not; LEAR only a little). For every hour its " +
+    "forecast can be split exactly into contributions per input (TreeSHAP); the 'push' is what the news inputs added, and " +
+    "the error reduction compares the BDT's error with and without that push against the realised price. ";
+  if (day && ok(day.news_push)) {
+    txt += `On ${fDayLong.format(dayDate(state.newsDay))} the news moved the BDT forecast by ${day.news_push >= 0 ? "+" : ""}${num(day.news_push, 1)} €/MWh on average` +
+      (ok(day.news_gain) ? (Math.abs(day.news_gain) <= 0.05 ? ", which made no real difference to its error." :
+        day.news_gain > 0 ? `, which brought it ${num(day.news_gain, 2)} €/MWh per hour closer to the realised price (helped).`
+          : `, which put it ${num(-day.news_gain, 2)} €/MWh per hour further from the realised price (hurt).`) : "; the realised price is not known yet.");
+  }
+  $("nimp-note").textContent = txt;
+  lineChart($("nimp-chart"), {
+    id: "nimp", title: "News effect on the BDT forecast", labels: dates.map((d) => fDay.format(dayDate(d))), height: 200, decimals: 2,
+    xTicks: dates.map((d, i) => ({ i, text: fDay.format(dayDate(d)) })).filter((_, i) => i % 7 === 0),
+    selected: sel >= 0 ? { i: sel, text: "shown" } : null,
+    onPick: (i) => { state.newsDay = dates[i]; renderNews(); renderNewsImpact(); },
+    series: [
+      { name: "Push on the forecast, €/MWh (day average)", color: "var(--neutral)", values: rows.map((d) => (ok(d.news_push) ? d.news_push : null)) },
+      { name: "Error reduction, €/MWh (above 0 = the news helped)", color: "var(--combined)", values: rows.map((d) => (ok(d.news_gain) ? d.news_gain : null)) },
+    ],
+    empty: "Not computed yet for this zone.",
+  });
+}
+
 /* ---------- market level and drift ---------- */
 function renderLevel(animate = true) {
   const d = state.doc, lv = d.level.slice(-state.levelRange);
@@ -657,7 +715,7 @@ async function loadZone(code) {
   state.doc = doc;
   state.dayIdx = doc.hourly.length - 1;
   document.querySelectorAll(".ov-row").forEach((r) => r.setAttribute("aria-pressed", String(r.dataset.zone === code)));
-  renderForecast(); renderRecord(); renderLevel(); renderWeather();
+  renderForecast(); renderRecord(); renderLevel(); renderWeather(); renderNewsImpact();
   history.replaceState(null, "", "#" + code);
 }
 

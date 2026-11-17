@@ -7,7 +7,7 @@
 <meta name="description" content="Tomorrow's hourly electricity prices for nine European bidding zones, forecast every morning before the day-ahead auction, with forecast ranges. Hobby project.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 12 L5 7 L9 9 L15 3' fill='none' stroke='%233987e5' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark";</script>
-<link rel="stylesheet" href="style.css?v=d21950876e">
+<link rel="stylesheet" href="style.css?v=bf11578084">
 </head>
 <body>
 <main>
@@ -69,6 +69,10 @@
     <div class="tiles" id="rec-tiles"></div>
     <h3>Average miss per hour, 7-day average, €/MWh</h3>
     <div class="chart" id="rec-daily"></div>
+    <div id="rec-hourly-wrap">
+      <h3 id="rec-hourly-title">Forecast and realised price per hour, €/MWh</h3>
+      <div class="chart" id="rec-hourly"></div>
+    </div>
     <h3>Hours inside the 80% forecast range, 7-day average, %</h3>
     <div class="chart" id="rec-cover"></div>
     <details class="table-view"><summary>Show as table</summary><div id="rec-table"></div></details>
@@ -88,6 +92,10 @@
     <h2>Energy news</h2>
     <h3>News scores per day (headlines pointing to higher minus lower prices) <span class="muted">(click a day to see its headlines)</span></h3>
     <div class="chart" id="news-chart"></div>
+    <h3 id="nimp-title">What the news did to the forecasts</h3>
+    <p class="note" id="nimp-note"></p>
+    <div class="tiles" id="nimp-tiles"></div>
+    <div class="chart" id="nimp-chart"></div>
     <h3 id="news-day-title"></h3>
     <p class="note" id="news-note"></p>
     <p class="summary" id="news-summary"></p>
@@ -131,6 +139,6 @@
     <p>A personal hobby project. Not advice of any kind; no guarantee of accuracy or availability.</p>
   </footer>
 </main>
-<script src="app.js?v=d21950876e"></script>
+<script src="app.js?v=bf11578084"></script>
 </body>
 </html>
