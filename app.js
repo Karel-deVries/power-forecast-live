@@ -663,7 +663,8 @@ function renderNewsImpact() {
     txt += `On ${fDayLong.format(dayDate(state.newsDay))} the news moved the BDT forecast by ${day.news_push >= 0 ? "+" : ""}${num(day.news_push, 1)} €/MWh on average` +
       (ok(day.news_gain) ? (Math.abs(day.news_gain) <= 0.05 ? ", which made no real difference to its error." :
         day.news_gain > 0 ? `, which brought it ${num(day.news_gain, 2)} €/MWh per hour closer to the realised price (helped).`
-          : `, which put it ${num(-day.news_gain, 2)} €/MWh per hour further from the realised price (hurt).`) : "; the realised price is not known yet.");
+          : `, which put it ${num(-day.news_gain, 2)} €/MWh per hour further from the realised price (hurt).`) : "; the realised price is not known yet.") +
+      (day.news_exact === false ? " (Approximate: recomputed later with updated inputs, so the model differs slightly from the one that made the forecast.)" : "");
   }
   $("nimp-note").textContent = txt;
   lineChart($("nimp-chart"), {
