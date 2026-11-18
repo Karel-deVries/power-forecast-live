@@ -14,6 +14,11 @@ on:
     - cron: "0 4 * * *"
     - cron: "0 6 * * *"
   workflow_dispatch:
+    inputs:
+      test:
+        description: "Only check that DISPATCH_TOKEN can reach the forecast job (starts nothing)"
+        type: boolean
+        default: true
 concurrency:
   group: wake
   cancel-in-progress: false
@@ -32,6 +37,12 @@ jobs:
           set -u
           if [ -z "$TOKEN" ]; then echo "::warning::secret DISPATCH_TOKEN is missing: nothing started"; exit 0; fi
           api=https://api.github.com/repos/Karel-deVries/weather-power-forecast/actions/workflows/live.yml/dispatches
+          if [ "${{ inputs.test }}" = "true" ]; then
+            code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+              https://api.github.com/repos/Karel-deVries/weather-power-forecast/actions/workflows/live.yml)
+            if [ "$code" = 200 ]; then echo "token OK: the forecast job is reachable"; else echo "::error::token cannot reach the forecast job (HTTP $code)"; exit 1; fi
+            exit 0
+          fi
           start_job() {
             code=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Authorization: Bearer $TOKEN" \
               -H "Accept: application/vnd.github+json" "$api" -d '{"ref":"main","inputs":{"final":"false"}}')
